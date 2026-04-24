@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spektrum Device Setup</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<div class="card">
+    <h1>Set Up Your Camera Device</h1>
+    <p class="lead">Connect the Radxa Zero W to your Wi-Fi and backend. No SD card editing needed.</p>
+    <form id="provision-form">
+        <div class="row">
+            <div>
+                <label for="ssid">Wi-Fi SSID</label>
+                <input id="ssid" name="ssid" list="ssid-list" placeholder="Enter SSID manually if list is empty" />
+                <datalist id="ssid-list"></datalist>
+            </div>
+            <div>
+                <label for="password">Wi-Fi Password</label>
+                <input id="password" name="password" type="password" autocomplete="off" />
+            </div>
+        </div>
+
+        <label for="backend_http">Backend HTTP URL</label>
+        <input id="backend_http" name="backend_http" placeholder="http://192.168.1.100:8000" />
+
+        <div class="row">
+            <div>
+                <label for="name">Device Name</label>
+                <input id="name" name="name" placeholder="Radxa Cam" />
+            </div>
+        </div>
+
+        <label for="video_device">Camera Device Path</label>
+        <input id="video_device" name="video_device" value="/dev/video0" />
+
+        <button type="button" class="secondary" id="refresh">Refresh Wi-Fi List</button>
+        <button type="button" class="secondary" id="download-logs">Download Device Logs</button>
+        <button type="button" class="secondary" id="unpair">Unpair Device</button>
+        <button type="button" class="secondary danger" id="factory-reset">Factory Reset</button>
+        <button type="submit">Save and Connect</button>
+    </form>
+    <hr class="separator" />
+    <p><strong>Device ID:</strong> <span id="device-id">-</span></p>
+    <p><strong>Pairing Status:</strong> <span id="pair-status">Unknown</span></p>
+    <p><strong>Pairing Code:</strong> <span id="pair-code">-</span></p>
+    <p><strong>Code Expires:</strong> <span id="pair-expiry">-</span></p>
+    <p><strong>Backend:</strong> <a id="backend-link" href="#" target="_blank" rel="noopener noreferrer">-</a></p>
+    <hr class="separator" />
+    <p class="stream-title"><strong>Camera Stream:</strong> <span id="stream-status-badge">-</span></p>
+    <p id="stream-detail-el" class="stream-detail"></p>
+    <p id="result"></p>
+    <small>After submit, the device will retry Wi-Fi/backend connection while this local portal stays available. Pairing status and camera stream status update automatically.</small>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

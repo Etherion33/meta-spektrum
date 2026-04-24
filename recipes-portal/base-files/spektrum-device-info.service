@@ -1,0 +1,14 @@
+[Unit]
+Description=Spektrum device info portal (always-on HTTP)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/spektrum/spektrum.env
+ExecStart=/usr/bin/bash -lc '/usr/bin/python3 ${SPEKTRUM_ROOT:-/opt/spektrum}/scripts/sbc/provisioning_server.py --state-db ${SPEKTRUM_STATE_DB:-/var/lib/spektrum/device_state.db} --host ${SPEKTRUM_PORTAL_HOST:-0.0.0.0} --port ${SPEKTRUM_PORTAL_PORT:-80}'
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
