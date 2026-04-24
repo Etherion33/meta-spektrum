@@ -1,0 +1,12 @@
+[Unit]
+Description=Spektrum Tailscale enrollment trigger
+PartOf=spektrum-runtime.target
+After=spektrum-first-boot.service
+Wants=spektrum-first-boot.service
+
+[Path]
+PathExists=/etc/spektrum/tailscale-authkey
+Unit=spektrum-tailscale-enroll.service
+
+[Install]
+WantedBy=spektrum-runtime.target

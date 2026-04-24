@@ -1,0 +1,18 @@
+[Unit]
+Description=Spektrum Tailscale one-time enrollment
+PartOf=spektrum-runtime.target
+After=spektrum-first-boot.service network-online.target nss-lookup.target tailscaled.service
+Wants=spektrum-first-boot.service network-online.target nss-lookup.target tailscaled.service
+ConditionPathExists=/etc/spektrum/tailscale-authkey
+ConditionPathExists=!/var/lib/spektrum/.tailscale_enrolled
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/spektrum/spektrum.env
+ExecStart=/usr/bin/bash -lc '${SPEKTRUM_ROOT:-/opt/spektrum}/scripts/sbc/tailscale_enroll.sh'
+Restart=on-failure
+RestartSec=30
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=spektrum-runtime.target

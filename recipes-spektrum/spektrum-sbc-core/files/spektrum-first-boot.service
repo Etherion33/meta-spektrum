@@ -1,0 +1,16 @@
+[Unit]
+Description=Spektrum first-boot setup
+Before=spektrum-runtime.target
+ConditionPathExists=!/var/lib/spektrum/.first_boot_done
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/etc/spektrum/spektrum.env
+EnvironmentFile=-/etc/spektrum/first-boot.env
+ExecStart=/usr/bin/bash -lc '${SPEKTRUM_ROOT:-/opt/spektrum}/scripts/sbc/first_boot_setup.sh'
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=spektrum-runtime.target

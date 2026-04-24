@@ -1,0 +1,7 @@
+[Unit]
+Description=Spektrum runtime target
+Wants=spektrum-first-boot.service
+After=spektrum-first-boot.service
+
+[Install]
+WantedBy=multi-user.target
