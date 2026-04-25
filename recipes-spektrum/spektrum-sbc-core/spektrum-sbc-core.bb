@@ -4,6 +4,11 @@ LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 PR = "r0"
 
+# Baked into /etc/spektrum/first-boot.env at build time.
+# Override in local.conf: SPEKTRUM_DEVICE_SECRET = "your-secret-here"
+SPEKTRUM_DEVICE_SECRET ?= ""
+SPEKTRUM_TAILSCALE_AUTHKEY ?= ""
+
 inherit allarch systemd
 
 SRC_URI += " \
@@ -67,11 +72,10 @@ do_install() {
 
     install -m 0644 ${WORKDIR}/spektrum-sbc.env ${D}${sysconfdir}/spektrum/spektrum.env
     install -m 0644 ${WORKDIR}/spektrum-sbc.tmpfiles.conf ${D}${nonarch_libdir}/tmpfiles.d/spektrum-sbc.conf
-    cat >${D}${sysconfdir}/spektrum/first-boot.env <<'EOF'
-# Optional first-boot values
-# SPEKTRUM_DEVICE_SECRET=
-# SPEKTRUM_TAILSCALE_AUTHKEY=
-EOF
+    {
+        printf 'SPEKTRUM_DEVICE_SECRET=%s\n' "${SPEKTRUM_DEVICE_SECRET}"
+        printf 'SPEKTRUM_TAILSCALE_AUTHKEY=%s\n' "${SPEKTRUM_TAILSCALE_AUTHKEY}"
+    } > ${D}${sysconfdir}/spektrum/first-boot.env
 }
 
 CONFFILES:${PN} += " \
