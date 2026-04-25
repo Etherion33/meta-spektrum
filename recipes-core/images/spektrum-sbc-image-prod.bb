@@ -13,7 +13,7 @@ IMAGE_INSTALL:append = " \
     linux-firmware-bcm-0bb4-0306 \
 "
 
-IMAGE_FEATURES:remove = "debug-tweaks splash"
+IMAGE_FEATURES:remove = "debug-tweaks"
 EXTRA_IMAGE_FEATURES:remove = "debug-tweaks"
 IMAGE_FEATURES:append = " read-only-rootfs"
 

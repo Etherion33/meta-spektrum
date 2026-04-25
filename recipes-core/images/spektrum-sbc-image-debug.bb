@@ -12,7 +12,6 @@ IMAGE_FEATURES:append = " \
     tools-debug \
     dev-pkgs \
     dbg-pkgs \
-    splash \
 "
 
 IMAGE_INSTALL:append = " \
