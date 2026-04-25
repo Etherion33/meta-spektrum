@@ -17,6 +17,9 @@ IMAGE_FEATURES:append = " \
 
 IMAGE_INSTALL:append = " \
     packagegroup-spektrum-sbc \
+    linux-firmware-bcm43430 \
+    linux-firmware-bcm43430a0 \
+    linux-firmware-bcm-0bb4-0306 \
     iperf3 \
     htop \
     net-tools \

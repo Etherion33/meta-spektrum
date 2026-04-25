@@ -6,7 +6,12 @@ require recipes-core/images/core-image-base.bb
 COMPATIBLE_MACHINE = "^radxa-zero$"
 ENABLE_UART = "0"
 
-IMAGE_INSTALL:append = " packagegroup-spektrum-sbc"
+IMAGE_INSTALL:append = " \
+    packagegroup-spektrum-sbc \
+    linux-firmware-bcm43430 \
+    linux-firmware-bcm43430a0 \
+    linux-firmware-bcm-0bb4-0306 \
+"
 
 IMAGE_FEATURES:remove = "debug-tweaks splash"
 EXTRA_IMAGE_FEATURES:remove = "debug-tweaks"
