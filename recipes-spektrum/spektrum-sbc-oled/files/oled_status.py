@@ -67,7 +67,7 @@ def detect_ip(preferred_iface: str = "wlan0") -> tuple[str, str]:
             text=True,
             stderr=subprocess.DEVNULL,
         )
-            candidates: list[tuple[int, str, str]] = []
+        candidates: list[tuple[int, str, str]] = []
         for line in output.splitlines():
             parts = line.split()
             if len(parts) < 4:
@@ -171,6 +171,21 @@ def read_uptime() -> str:
     if days > 0:
         return f"{days}d {hours}h"
     return f"{hours:02d}h {minutes:02d}m"
+
+
+def detect_i2c_ports(preferred_port: int) -> list[int]:
+    """Return candidate I2C bus numbers, preferring the configured port first."""
+    detected: list[int] = []
+    for path in Path("/dev").glob("i2c-*"):
+        suffix = path.name.rsplit("-", 1)[-1]
+        if suffix.isdigit():
+            detected.append(int(suffix))
+
+    ordered = [preferred_port]
+    for port in sorted(set(detected)):
+        if port not in ordered:
+            ordered.append(port)
+    return ordered
 
 
 def mock_battery_percent(device_id: str) -> int:
@@ -308,7 +323,7 @@ def render_secondary_page(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Render device status on SSD1306 OLED")
     parser.add_argument("--state-db", type=Path, default=Path("/var/lib/spektrum/device_state.db"))
-    parser.add_argument("--i2c-port", type=int, default=3)
+    parser.add_argument("--i2c-port", type=int, default=0)
     parser.add_argument("--i2c-address", default="0x3C")
     parser.add_argument("--width", type=int, default=128)
     parser.add_argument("--height", type=int, default=32)
@@ -327,8 +342,27 @@ def main() -> int:
     store = StateStore(args.state_db)
 
     def init_display():
-        serial = i2c(port=args.i2c_port, address=int(args.i2c_address, 16))
-        return ssd1306(serial, width=args.width, height=args.height, rotate=args.rotate)
+        address = int(args.i2c_address, 16)
+        last_error: Exception | None = None
+
+        for port in detect_i2c_ports(args.i2c_port):
+            try:
+                serial = i2c(port=port, address=address)
+                device = ssd1306(serial, width=args.width, height=args.height, rotate=args.rotate)
+                if port != args.i2c_port:
+                    print(
+                        f"oled detected at address {args.i2c_address} on i2c-{port} "
+                        f"(configured i2c-{args.i2c_port})",
+                        file=sys.stderr,
+                    )
+                args.i2c_port = port
+                return device
+            except Exception as exc:
+                last_error = exc
+
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("no /dev/i2c-* buses found")
 
     device = None
     main_font, small_font = load_fonts()
