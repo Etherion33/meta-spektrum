@@ -13,6 +13,10 @@ AGENT_SCRIPT="${SCRIPT_DIR}/device_agent.py"
 SWITCH_STA_SCRIPT="${SCRIPT_DIR}/switch_to_sta.sh"
 INFO_SERVICE_NAME="spektrum-device-info.service"
 
+is_non_negative_int() {
+  [[ "$1" =~ ^[0-9]+$ ]]
+}
+
 log() {
   echo "[$(date -Is)] $*"
 }
@@ -59,6 +63,12 @@ config_complete() {
   [[ -n "${backend_http}" && -n "${backend_ws}" && -n "${device_secret}" && -n "${ssid}" ]]
 }
 
+has_wifi_credentials() {
+  local ssid
+  ssid="$(read_state wifi_ssid)"
+  [[ -n "${ssid}" ]]
+}
+
 backend_reachable() {
   local backend_http
   local wifi_only
@@ -97,10 +107,23 @@ try_join_sta() {
 }
 
 start_provisioning() {
-  local before_stamp current_stamp
+  local mode="${1:-initial}"
+  local timeout_seconds="${2:-0}"
+  local before_stamp current_stamp elapsed
+  elapsed=0
+
+  if ! is_non_negative_int "${timeout_seconds}"; then
+    timeout_seconds=0
+  fi
+
   before_stamp="$(read_state last_configured_at)"
 
-  log "Starting AP provisioning mode"
+  if [[ "${mode}" == "recovery" ]]; then
+    log "Starting temporary recovery AP mode"
+  else
+    log "Starting AP provisioning mode"
+  fi
+
   bash "${SETUP_AP_SCRIPT}" "${WLAN_IFACE}" "${SHORT_ID}" "${AP_PASSWORD}"
 
   if systemctl list-unit-files | grep -q "^${INFO_SERVICE_NAME}"; then
@@ -113,9 +136,16 @@ start_provisioning() {
       log "Waiting for updated configuration from device portal"
       while true; do
         sleep 2
+        elapsed=$((elapsed + 2))
         current_stamp="$(read_state last_configured_at)"
         if [[ -n "${current_stamp}" && "${current_stamp}" != "${before_stamp}" ]]; then
+          log "Configuration updated from portal"
           break
+        fi
+
+        if [[ "${timeout_seconds}" -gt 0 && "${elapsed}" -ge "${timeout_seconds}" ]]; then
+          log "Recovery AP timeout reached (${timeout_seconds}s), returning to STA retries"
+          return 0
         fi
       done
     else
@@ -136,6 +166,21 @@ start_agent() {
 }
 
 main_loop() {
+  local sta_failures recovery_ap_enabled recovery_fail_threshold recovery_ap_window
+
+  recovery_ap_enabled="${SPEKTRUM_ENABLE_RECOVERY_AP:-1}"
+  recovery_fail_threshold="${SPEKTRUM_STA_FAIL_THRESHOLD:-6}"
+  recovery_ap_window="${SPEKTRUM_RECOVERY_AP_WINDOW_SECONDS:-180}"
+
+  if ! is_non_negative_int "${recovery_fail_threshold}"; then
+    recovery_fail_threshold=6
+  fi
+  if ! is_non_negative_int "${recovery_ap_window}"; then
+    recovery_ap_window=180
+  fi
+
+  sta_failures=0
+
   if systemctl list-unit-files | grep -q "^${INFO_SERVICE_NAME}"; then
     if ! systemctl is-active --quiet "${INFO_SERVICE_NAME}"; then
       log "Starting always-on device info service"
@@ -144,16 +189,34 @@ main_loop() {
   fi
 
   while true; do
-    if have_state && config_complete; then
+    if have_state && has_wifi_credentials; then
       if try_join_sta; then
-        start_agent
+        sta_failures=0
+        if config_complete; then
+          start_agent
+        fi
+        log "STA connected; backend/device configuration incomplete, waiting for portal configuration updates"
+        sleep 5
+        continue
       fi
-      log "Configured network not reachable, falling back to provisioning AP"
+
+      sta_failures=$((sta_failures + 1))
+      if [[ "${recovery_ap_enabled}" == "1" && "${sta_failures}" -ge "${recovery_fail_threshold}" ]]; then
+        log "STA failed ${sta_failures} times; opening temporary recovery AP for ${recovery_ap_window}s without resetting state"
+        start_provisioning recovery "${recovery_ap_window}"
+        sta_failures=0
+        sleep 2
+        continue
+      fi
+
+      log "Wi-Fi credentials exist; transient failure ${sta_failures}/${recovery_fail_threshold}, retrying STA (AP remains disabled)"
+      sleep 5
+      continue
     else
-      log "No complete config found, entering provisioning AP"
+      log "No Wi-Fi credentials found, entering provisioning AP"
     fi
 
-    start_provisioning
+    start_provisioning initial 0
     sleep 2
   done
 }

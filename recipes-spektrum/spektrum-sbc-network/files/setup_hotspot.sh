@@ -13,6 +13,9 @@ fi
 
 SSID="Device-${SHORT_ID}"
 
+install -d /etc/hostapd
+install -d /etc/dnsmasq.d
+
 cat >/etc/hostapd/hostapd.conf <<EOF
 interface=${WLAN_IFACE}
 driver=nl80211
@@ -81,13 +84,32 @@ systemctl restart hostapd
 if ! systemctl is-active --quiet dnsmasq; then
   echo "dnsmasq failed to start" >&2
   journalctl -u dnsmasq -n 40 --no-pager || true
-  exit 1
+  HOSTAPD_STACK_FAILED=1
 fi
 
 if ! systemctl is-active --quiet hostapd; then
   echo "hostapd failed to start" >&2
   journalctl -u hostapd -n 40 --no-pager || true
-  exit 1
+  HOSTAPD_STACK_FAILED=1
+fi
+
+if [[ "${HOSTAPD_STACK_FAILED:-0}" == "1" ]]; then
+  echo "Falling back to NetworkManager hotspot mode" >&2
+
+  if ! command -v nmcli >/dev/null 2>&1; then
+    echo "nmcli not available for AP fallback" >&2
+    exit 1
+  fi
+
+  systemctl stop hostapd dnsmasq || true
+  systemctl disable hostapd dnsmasq || true
+
+  nmcli dev set "${WLAN_IFACE}" managed yes || true
+  nmcli con delete spektrum-ap >/dev/null 2>&1 || true
+  nmcli con add type wifi ifname "${WLAN_IFACE}" con-name spektrum-ap autoconnect yes ssid "${SSID}" >/dev/null
+  nmcli con modify spektrum-ap 802-11-wireless.mode ap 802-11-wireless.band bg ipv4.method shared ipv4.addresses 192.168.4.1/24 >/dev/null
+  nmcli con modify spektrum-ap wifi-sec.key-mgmt wpa-psk wifi-sec.psk "${AP_PASSWORD}" >/dev/null
+  nmcli con up spektrum-ap
 fi
 
 echo "Hotspot started on ${WLAN_IFACE} with SSID ${SSID}"

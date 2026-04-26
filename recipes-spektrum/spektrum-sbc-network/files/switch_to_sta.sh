@@ -6,6 +6,7 @@ SSID="${2:?SSID is required}"
 PASSWORD="${3:-}"
 
 systemctl stop hostapd dnsmasq || true
+systemctl disable hostapd dnsmasq || true
 ip addr flush dev "${WLAN_IFACE}" || true
 
 if command -v nmcli >/dev/null 2>&1; then
