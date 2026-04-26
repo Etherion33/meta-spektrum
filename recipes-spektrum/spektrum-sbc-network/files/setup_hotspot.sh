@@ -6,6 +6,40 @@ SHORT_ID="${2:-$(cat /etc/machine-id | cut -c1-6)}"
 AP_PASSWORD="${3:-device12345}"
 COUNTRY_CODE="${COUNTRY_CODE:-US}"
 
+detect_wifi_iface() {
+  local iface candidate
+
+  if [[ -n "${WLAN_IFACE}" ]] && ip link show "${WLAN_IFACE}" >/dev/null 2>&1; then
+    echo "${WLAN_IFACE}"
+    return 0
+  fi
+
+  for _ in $(seq 1 60); do
+    for candidate in /sys/class/net/*; do
+      iface="$(basename "${candidate}")"
+      [[ "${iface}" == "lo" ]] && continue
+      [[ "${iface}" == tailscale* ]] && continue
+      [[ -d "${candidate}/wireless" ]] || continue
+      if ip link show "${iface}" >/dev/null 2>&1; then
+        echo "${iface}"
+        return 0
+      fi
+    done
+
+    if command -v nmcli >/dev/null 2>&1; then
+      iface="$(nmcli -t -f DEVICE,TYPE device status 2>/dev/null | awk -F: '$2=="wifi" && $1!="" {print $1; exit}')"
+      if [[ -n "${iface}" ]] && ip link show "${iface}" >/dev/null 2>&1; then
+        echo "${iface}"
+        return 0
+      fi
+    fi
+
+    sleep 1
+  done
+
+  return 1
+}
+
 if [[ ${#AP_PASSWORD} -lt 8 ]]; then
   echo "AP password must be at least 8 characters" >&2
   exit 1
@@ -13,8 +47,17 @@ fi
 
 SSID="Device-${SHORT_ID}"
 
+if ! WLAN_IFACE="$(detect_wifi_iface)"; then
+  echo "Wi-Fi interface not found (waited up to 60s)" >&2
+  ip -o link show || true
+  exit 1
+fi
+
+echo "Using Wi-Fi interface: ${WLAN_IFACE}"
+
 install -d /etc/hostapd
 install -d /etc/dnsmasq.d
+install -d /etc/default
 
 cat >/etc/hostapd/hostapd.conf <<EOF
 interface=${WLAN_IFACE}
@@ -44,12 +87,19 @@ dhcp-authoritative
 address=/#/192.168.4.1
 EOF
 
-sed -i 's|^#\?DAEMON_CONF=.*|DAEMON_CONF="/etc/hostapd/hostapd.conf"|' /etc/default/hostapd || true
+if [[ -f /etc/default/hostapd ]]; then
+  sed -i 's|^#\?DAEMON_CONF=.*|DAEMON_CONF="/etc/hostapd/hostapd.conf"|' /etc/default/hostapd || true
+  if ! grep -q '^DAEMON_CONF=' /etc/default/hostapd; then
+    printf 'DAEMON_CONF="/etc/hostapd/hostapd.conf"\n' >>/etc/default/hostapd
+  fi
+else
+  printf 'DAEMON_CONF="/etc/hostapd/hostapd.conf"\n' >/etc/default/hostapd
+fi
 
 if command -v nmcli >/dev/null 2>&1; then
-  nmcli radio wifi on || true
-  nmcli device disconnect "${WLAN_IFACE}" || true
-  nmcli dev set "${WLAN_IFACE}" managed no || true
+  nmcli radio wifi on >/dev/null 2>&1 || true
+  nmcli device disconnect "${WLAN_IFACE}" >/dev/null 2>&1 || true
+  nmcli dev set "${WLAN_IFACE}" managed no >/dev/null 2>&1 || true
 fi
 
 if command -v rfkill >/dev/null 2>&1; then
@@ -65,7 +115,7 @@ for _ in $(seq 1 10); do
 done
 
 if ! ip link show "${WLAN_IFACE}" >/dev/null 2>&1; then
-  echo "Wi-Fi interface ${WLAN_IFACE} not found" >&2
+  echo "Wi-Fi interface ${WLAN_IFACE} disappeared" >&2
   exit 1
 fi
 
