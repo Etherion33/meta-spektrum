@@ -13,7 +13,7 @@ PACKAGECONFIG:append:pn-spektrum-sbc = "${@bb.utils.contains('SPEKTRUM_ENABLE_TA
 
 # Python package split defaults (override if your layer names differ).
 SPEKTRUM_CORE_PYTHON_RDEPENDS ?= "python3-core python3-sqlite3 python3-websockets"
-SPEKTRUM_OLED_PYTHON_RDEPENDS ?= "python3-core python3-sqlite3 python3-pillow python3-luma-oled"
+SPEKTRUM_OLED_PYTHON_RDEPENDS ?= "python3-core python3-sqlite3 python3-cbor2 python3-pillow python3-luma-oled"
 
 # GStreamer package split defaults (override per distro/layer mix).
 SPEKTRUM_STREAMING_RDEPENDS ?= "gstreamer1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav v4l-utils"

@@ -15,12 +15,13 @@ S = "${WORKDIR}"
 SPEKTRUM_OLED_PYTHON_RDEPENDS ?= " \
     python3-core \
     python3-sqlite3 \
+    python3-cbor2 \
     python3-pillow \
     python3-luma-oled \
 "
 
 SYSTEMD_SERVICE:${PN} = "spektrum-oled-status.service"
-SYSTEMD_AUTO_ENABLE:${PN} = "disable"
+SYSTEMD_AUTO_ENABLE:${PN} = "enable"
 
 RDEPENDS:${PN} = " \
     spektrum-sbc-core \
