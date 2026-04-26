@@ -9,6 +9,8 @@
 # Also adds BCM43430A1.hcd (Bluetooth) from the LibreELEC repo (available in
 # WORKDIR as BCM43438A1.hcd — same firmware, different naming convention).
 
+PR:append = ".spektrum2"
+
 do_install:append() {
     # Replace old LibreELEC firmware binary with the upstream cypress version.
     # cyfmac43430-sdio.bin and cyfmac43430-sdio.clm_blob come from the same
@@ -16,6 +18,25 @@ do_install:append() {
     install -m 0644 \
         ${D}${nonarch_base_libdir}/firmware/cypress/cyfmac43430-sdio.bin \
         ${D}${nonarch_base_libdir}/firmware/brcm/brcmfmac43430-sdio.bin
+
+    # Some kernels request board-specific filenames derived from DT compatible,
+    # e.g. brcmfmac43430-sdio.radxa,zero.*. Provide aliases so firmware,
+    # NVRAM calibration, and CLM blob resolve consistently for AP mode.
+    for ext in bin txt clm_blob; do
+        if [ -f ${D}${nonarch_base_libdir}/firmware/brcm/brcmfmac43430-sdio.${ext} ]; then
+            install -m 0644 \
+                ${D}${nonarch_base_libdir}/firmware/brcm/brcmfmac43430-sdio.${ext} \
+                ${D}${nonarch_base_libdir}/firmware/brcm/brcmfmac43430-sdio.radxa,zero.${ext}
+        fi
+    done
+
+    # Radxa Zero uses AP6212 (BCM43430A1). Prefer AP6212-specific NVRAM
+    # calibration over the generic 43430 sdio text profile for AP stability.
+    if [ -f ${D}${nonarch_base_libdir}/firmware/brcm/brcmfmac43430-sdio.AP6212.txt ]; then
+        install -m 0644 \
+            ${D}${nonarch_base_libdir}/firmware/brcm/brcmfmac43430-sdio.AP6212.txt \
+            ${D}${nonarch_base_libdir}/firmware/brcm/brcmfmac43430-sdio.radxa,zero.txt
+    fi
 
     # Install Bluetooth HCD firmware for BCM43430A1 (AP6212 module on Radxa Zero).
     # The LibreELEC repo (fetched by meta-meson) provides this as BCM43438A1.hcd.
@@ -28,4 +49,7 @@ do_install:append() {
 
 FILES:${PN}-bcm43430 += " \
     ${nonarch_base_libdir}/firmware/brcm/BCM43430A1.hcd \
+    ${nonarch_base_libdir}/firmware/brcm/brcmfmac43430-sdio.radxa,zero.bin \
+    ${nonarch_base_libdir}/firmware/brcm/brcmfmac43430-sdio.radxa,zero.txt \
+    ${nonarch_base_libdir}/firmware/brcm/brcmfmac43430-sdio.radxa,zero.clm_blob \
 "
