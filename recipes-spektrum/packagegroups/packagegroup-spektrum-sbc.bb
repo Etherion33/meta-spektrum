@@ -6,4 +6,5 @@ inherit packagegroup
 
 RDEPENDS:${PN} = " \
     spektrum-sbc \
+    i2c-tools \
 "
