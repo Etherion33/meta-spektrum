@@ -1,8 +1,8 @@
 [Unit]
 Description=Spektrum autonomous SBC bootstrap (provisioning + runtime)
 PartOf=spektrum-runtime.target
-After=spektrum-first-boot.service network-online.target
-Wants=spektrum-first-boot.service network-online.target
+After=spektrum-first-boot.service network.target
+Wants=spektrum-first-boot.service
 
 [Service]
 Type=simple

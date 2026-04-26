@@ -49,6 +49,23 @@ if command -v nmcli >/dev/null 2>&1; then
   nmcli dev set "${WLAN_IFACE}" managed no || true
 fi
 
+if command -v rfkill >/dev/null 2>&1; then
+  rfkill unblock wlan || true
+  rfkill unblock wifi || true
+fi
+
+for _ in $(seq 1 10); do
+  if ip link show "${WLAN_IFACE}" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+if ! ip link show "${WLAN_IFACE}" >/dev/null 2>&1; then
+  echo "Wi-Fi interface ${WLAN_IFACE} not found" >&2
+  exit 1
+fi
+
 systemctl stop hostapd dnsmasq || true
 
 ip link set "${WLAN_IFACE}" down || true
