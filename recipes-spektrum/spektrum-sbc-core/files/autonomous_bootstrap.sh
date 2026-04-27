@@ -12,9 +12,40 @@ PROVISIONING_SCRIPT="${SCRIPT_DIR}/provisioning_server.py"
 AGENT_SCRIPT="${SCRIPT_DIR}/device_agent.py"
 SWITCH_STA_SCRIPT="${SCRIPT_DIR}/switch_to_sta.sh"
 INFO_SERVICE_NAME="spektrum-device-info.service"
+INFO_SERVICE_PATHS=(
+  "/etc/systemd/system/${INFO_SERVICE_NAME}"
+  "/usr/lib/systemd/system/${INFO_SERVICE_NAME}"
+)
+
+has_info_service_unit() {
+  local unit_path
+  for unit_path in "${INFO_SERVICE_PATHS[@]}"; do
+    if [[ -f "${unit_path}" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
 
 is_non_negative_int() {
   [[ "$1" =~ ^[0-9]+$ ]]
+}
+
+ap_is_ready() {
+  if ! ip link show "${WLAN_IFACE}" >/dev/null 2>&1; then
+    return 1
+  fi
+
+  ip -4 -o addr show dev "${WLAN_IFACE}" | grep -q '192\.168\.4\.1/24'
+}
+
+ensure_ap_ready() {
+  if ap_is_ready; then
+    return 0
+  fi
+
+  log "AP is not ready on ${WLAN_IFACE}; re-running hotspot setup"
+  bash "${SETUP_AP_SCRIPT}" "${WLAN_IFACE}" "${SHORT_ID}" "${AP_PASSWORD}"
 }
 
 log() {
@@ -109,11 +140,17 @@ try_join_sta() {
 start_provisioning() {
   local mode="${1:-initial}"
   local timeout_seconds="${2:-0}"
+  local healthcheck_interval
   local before_stamp current_stamp elapsed
   elapsed=0
 
+  healthcheck_interval="${SPEKTRUM_AP_HEALTHCHECK_INTERVAL_SECONDS:-5}"
+
   if ! is_non_negative_int "${timeout_seconds}"; then
     timeout_seconds=0
+  fi
+  if ! is_non_negative_int "${healthcheck_interval}" || [[ "${healthcheck_interval}" -lt 1 ]]; then
+    healthcheck_interval=5
   fi
 
   before_stamp="$(read_state last_configured_at)"
@@ -126,7 +163,7 @@ start_provisioning() {
 
   bash "${SETUP_AP_SCRIPT}" "${WLAN_IFACE}" "${SHORT_ID}" "${AP_PASSWORD}"
 
-  if systemctl list-unit-files | grep -q "^${INFO_SERVICE_NAME}"; then
+  if has_info_service_unit; then
     if ! systemctl is-active --quiet "${INFO_SERVICE_NAME}"; then
       log "Starting always-on device info service"
       systemctl start "${INFO_SERVICE_NAME}" || true
@@ -135,8 +172,9 @@ start_provisioning() {
     if config_complete; then
       log "Waiting for updated configuration from device portal"
       while true; do
-        sleep 2
-        elapsed=$((elapsed + 2))
+        ensure_ap_ready || true
+        sleep "${healthcheck_interval}"
+        elapsed=$((elapsed + healthcheck_interval))
         current_stamp="$(read_state last_configured_at)"
         if [[ -n "${current_stamp}" && "${current_stamp}" != "${before_stamp}" ]]; then
           log "Configuration updated from portal"
@@ -151,7 +189,8 @@ start_provisioning() {
     else
       log "Waiting for initial configuration from device portal"
       while ! config_complete; do
-        sleep 2
+        ensure_ap_ready || true
+        sleep "${healthcheck_interval}"
       done
     fi
   else
@@ -181,7 +220,7 @@ main_loop() {
 
   sta_failures=0
 
-  if systemctl list-unit-files | grep -q "^${INFO_SERVICE_NAME}"; then
+  if has_info_service_unit; then
     if ! systemctl is-active --quiet "${INFO_SERVICE_NAME}"; then
       log "Starting always-on device info service"
       systemctl start "${INFO_SERVICE_NAME}" || true

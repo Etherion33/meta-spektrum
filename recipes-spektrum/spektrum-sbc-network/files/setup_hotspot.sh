@@ -1,14 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# systemd services may run with a reduced PATH that omits sbin locations.
+export PATH="/usr/sbin:/sbin:/usr/bin:/bin:${PATH:-}"
+
 WLAN_IFACE="${1:-wlan0}"
 SHORT_ID="${2:-$(cat /etc/machine-id | cut -c1-6)}"
 AP_PASSWORD="${3:-device12345}"
 COUNTRY_CODE="${COUNTRY_CODE:-US}"
 AP_CHANNELS="${SPEKTRUM_AP_CHANNELS:-11 6 1 13}"
 
+if ! command -v ip >/dev/null 2>&1; then
+  echo "[setup_hotspot] missing required command: ip (iproute2)" >&2
+  exit 1
+fi
+
 log() {
   echo "[setup_hotspot] $*"
+}
+
+prepare_iface_for_ap() {
+  if ! command -v iw >/dev/null 2>&1; then
+    return 0
+  fi
+
+  log "Preparing ${WLAN_IFACE} for AP mode"
+  ip link set "${WLAN_IFACE}" down >/dev/null 2>&1 || true
+  iw dev "${WLAN_IFACE}" set type __ap >/dev/null 2>&1 || true
+  ip link set "${WLAN_IFACE}" up >/dev/null 2>&1 || true
 }
 
 ap_is_ready() {
@@ -66,13 +85,20 @@ try_nm_hotspot() {
   log "Trying NetworkManager hotspot path on ${WLAN_IFACE}"
   timeout 15 nmcli --wait 10 radio wifi on >/dev/null 2>&1 || true
   timeout 15 nmcli --wait 10 dev set "${WLAN_IFACE}" managed yes >/dev/null 2>&1 || true
+  timeout 20 systemctl restart NetworkManager >/dev/null 2>&1 || true
   timeout 15 nmcli --wait 10 con delete spektrum-ap >/dev/null 2>&1 || true
+
+  # Mirror the known-good manual sequence.
+  ip addr flush dev "${WLAN_IFACE}" >/dev/null 2>&1 || true
+  prepare_iface_for_ap
 
   for ch in ${AP_CHANNELS}; do
     log "Trying NetworkManager AP channel ${ch}"
     timeout 15 nmcli --wait 10 con delete spektrum-ap >/dev/null 2>&1 || true
     timeout 15 nmcli --wait 10 con add type wifi ifname "${WLAN_IFACE}" con-name spektrum-ap ssid "${SSID}" >/dev/null 2>&1 || true
     timeout 15 nmcli --wait 10 con modify spektrum-ap 802-11-wireless.mode ap 802-11-wireless.band bg 802-11-wireless.channel "${ch}" >/dev/null 2>&1 || true
+    timeout 15 nmcli --wait 10 con modify spektrum-ap connection.autoconnect yes connection.autoconnect-retries 0 connection.interface-name "${WLAN_IFACE}" >/dev/null 2>&1 || true
+    timeout 15 nmcli --wait 10 con modify spektrum-ap 802-11-wireless.powersave 2 >/dev/null 2>&1 || true
     timeout 15 nmcli --wait 10 con modify spektrum-ap 802-11-wireless.cloned-mac-address permanent >/dev/null 2>&1 || true
     timeout 15 nmcli --wait 10 con modify spektrum-ap wifi-sec.key-mgmt wpa-psk wifi-sec.psk "${AP_PASSWORD}" >/dev/null 2>&1 || true
     timeout 15 nmcli --wait 10 con modify spektrum-ap ipv4.method shared ipv4.addresses 192.168.4.1/24 ipv6.method ignore >/dev/null 2>&1 || true
@@ -158,6 +184,8 @@ if command -v iw >/dev/null 2>&1; then
   iw reg set "${COUNTRY_CODE}" >/dev/null 2>&1 || true
 fi
 
+prepare_iface_for_ap
+
 for _ in $(seq 1 10); do
   if ip link show "${WLAN_IFACE}" >/dev/null 2>&1; then
     break
@@ -182,6 +210,8 @@ if command -v nmcli >/dev/null 2>&1; then
 fi
 
 systemctl stop wpa_supplicant >/dev/null 2>&1 || true
+
+prepare_iface_for_ap
 
 systemctl stop hostapd dnsmasq || true
 
